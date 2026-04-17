@@ -965,6 +965,49 @@ async function makePDFFile(record) {
 }
 
 // ── Save & Download PDF ─────────────────────────────────────
+// ══════════════════════════════════════════════════════════
+// WEEKLY FRIDAY BACKUP PROMPT
+// ══════════════════════════════════════════════════════════
+function _checkFridayBackup() {
+  const today = new Date();
+  // Only prompt on Fridays (getDay() === 5)
+  if (today.getDay() !== 5) return;
+
+  // Check if we already prompted today
+  const lastPrompt = LS.get('pod_backup_prompt_date');
+  const todayStr   = today.toISOString().slice(0, 10); // "YYYY-MM-DD"
+  if (lastPrompt === todayStr) return;
+
+  // Mark that we've prompted today so it won't ask again
+  LS.set('pod_backup_prompt_date', todayStr);
+
+  // Small delay so the invoice confirmation doesn't clash
+  setTimeout(() => {
+    const last = LS.get('pod_last_backup');
+    const lastStr = last
+      ? new Date(last).toLocaleDateString('en-NZ', {day:'numeric', month:'short', year:'numeric'})
+      : 'never';
+
+    const doBackup = confirm(
+      `📅 It's Friday — time to back up!
+
+` +
+      `Last backup: ${lastStr}
+
+` +
+      `Go to Settings → Google Drive backup now?`
+    );
+    if (doBackup) {
+      showScreen('settings');
+      // Scroll to backup section after screen switches
+      setTimeout(() => {
+        const card = document.getElementById('driveBackupBtn');
+        if (card) card.scrollIntoView({behavior:'smooth', block:'center'});
+      }, 300);
+    }
+  }, 1500);
+}
+
 async function saveAndPrint() {
   const record = buildRecord();
   _saveRecord(record);
@@ -982,6 +1025,7 @@ async function saveAndPrint() {
     if (banner) banner.remove();
     locations = locations.filter(l => l.id !== '__edit_loc__');
     selectedPatients = []; renderPatients();
+    _checkFridayBackup();
   } catch(e) {
     hidePDFProgress();
     alert('Could not generate PDF: ' + e.message);
@@ -1019,7 +1063,8 @@ ${pdfName}`;
       const banner = document.getElementById('edit-banner');
       if (banner) banner.remove();
       locations = locations.filter(l => l.id !== '__edit_loc__');
-      selectedPatients = []; renderPatients(); return;
+      selectedPatients = []; renderPatients();
+      _checkFridayBackup(); return;
       } catch(e) {
         if (e.name === 'AbortError') { selectedPatients = []; renderPatients(); return; }
         // non-abort error: fall through to desktop path
@@ -1044,6 +1089,7 @@ ${pdfName}`;
     }, 1400);
 
     selectedPatients = []; renderPatients();
+    _checkFridayBackup();
   } catch(e) {
     hidePDFProgress();
     alert('Could not generate PDF: ' + e.message);
