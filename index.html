@@ -1915,15 +1915,14 @@ function importBackup(event) {
       if (!confirm(`Restore from "${file.name}"?\n\nRestores:\n• Settings\n• ${(data.locations||[]).length} location(s)\n• ${(data.invoices||[]).length} invoice(s)\n\nCurrent data will be replaced.`)) return;
       LS.restore(data);
       settings  = LS.get('pod_settings')  || {};
-      // Handle old backups that stored To fields in d.to
-      if (d.to && !settings.toName) {
-        settings.toName  = d.to.name  || '';
-        settings.toEmail = d.to.email || '';
+      // Handle old backups that stored To fields in data.to
+      if (data.to && !settings.toName) {
+        settings.toName  = data.to.name  || '';
+        settings.toEmail = data.to.email || '';
         LS.set('pod_settings', settings);
       }
       locations = LS.get('pod_locations') || [];
       invoices  = LS.get('pod_invoices')  || [];
-      // To fields live in settings — renderSettings() below handles display
       refreshLocSelect(); onLocChange(); updateProviderHint(); renderSettings();
       showStatus(`Restored! ${invoices.length} invoice(s) in history.`, 'ok');
     } catch { showStatus('Could not read this file.', 'err'); }
