@@ -219,7 +219,13 @@ input.unlocked:focus{box-shadow:0 0 0 3px rgba(24,95,165,.15);border-color:var(-
 <div id="screen-history" class="screen">
   <div class="topbar">
     <h1>Invoice History</h1>
-    <span id="history-count" class="badge" style="font-size:12px"></span>
+    <div style="display:flex;align-items:center;gap:8px">
+      <span id="history-count" class="badge" style="font-size:12px"></span>
+      <button id="totals-toggle-btn" onclick="toggleTotals()"
+        style="font-size:12px;padding:4px 11px;border-radius:20px;background:var(--blue-bg);color:var(--blue-text);border-color:var(--blue);font-weight:600">
+        $ Hide totals
+      </button>
+    </div>
   </div>
   <div style="margin-bottom:10px">
     <input type="search" id="history-search" placeholder="Search by name, location, invoice #..." oninput="renderHistory()">
@@ -305,7 +311,7 @@ input.unlocked:focus{box-shadow:0 0 0 3px rgba(24,95,165,.15);border-color:var(-
 
   <div style="text-align:center;padding:8px 0 4px;font-size:12px;color:var(--text3);line-height:1.8">
     <div style="font-weight:600;font-size:13px;color:var(--text2)">PodINV App</div>
-    <div>Version 1.5</div>
+    <div>Version 1.5.1</div>
     <div>18 April 2026</div>
   </div>
 </div>
@@ -1123,6 +1129,19 @@ td{padding:10px 12px;border-bottom:.5px solid #ccc;vertical-align:top}
 // ══════════════════════════════════════════════════════════
 // ── Track which year/month groups are open ──────────────────
 const _historyOpen = { years: {}, months: {} };
+let _showTotals = true;  // toggle totals visibility in history
+
+function toggleTotals() {
+  _showTotals = !_showTotals;
+  const btn = document.getElementById('totals-toggle-btn');
+  if (btn) {
+    btn.textContent = _showTotals ? '$ Hide totals' : '$ Show totals';
+    btn.style.background   = _showTotals ? 'var(--blue-bg)'   : 'var(--bg2)';
+    btn.style.color        = _showTotals ? 'var(--blue-text)' : 'var(--text2)';
+    btn.style.borderColor  = _showTotals ? 'var(--blue)'      : 'var(--border2)';
+  }
+  renderHistory();
+}
 
 function renderHistory() {
   const q = (document.getElementById('history-search').value || '').toLowerCase();
@@ -1184,7 +1203,7 @@ function renderHistory() {
     yearHdr.innerHTML =
       `<span>${yr} <span class="group-year-meta">${yearCount} invoice${yearCount!==1?'s':''}</span></span>` +
       `<span style="display:flex;align-items:center;gap:8px">` +
-      `<span style="font-size:15px">$${yearTotal.toFixed(2)}</span>` +
+      (_showTotals ? `<span style="font-size:15px">$${yearTotal.toFixed(2)}</span>` : '') +
       `<span class="group-chevron${yearIsOpen?' open':''}">▼</span></span>`;
     yearHdr.onclick = () => {
       _historyOpen.years[yr] = !_historyOpen.years[yr];
@@ -1216,7 +1235,7 @@ function renderHistory() {
       moHdr.innerHTML =
         `<span>${moLabel} <span class="group-month-meta">${moCount} invoice${moCount!==1?'s':''}</span></span>` +
         `<span style="display:flex;align-items:center;gap:8px">` +
-        `<span style="font-size:14px;color:var(--text2)">$${moTotal.toFixed(2)}</span>` +
+        (_showTotals ? `<span style="font-size:14px;color:var(--text2)">$${moTotal.toFixed(2)}</span>` : '') +
         `<span class="group-chevron${moIsOpen?' open':''}">▼</span></span>`;
       moHdr.onclick = () => {
         _historyOpen.months[moKey] = !_historyOpen.months[moKey];
@@ -1247,7 +1266,7 @@ function makeInvCard(inv) {
         <span class="inv-card-num">#${inv.invNum}</span>
         <div style="font-size:12px;color:var(--text3);margin-top:4px">${formatDateNZ(inv.createdAt)}</div>
       </div>
-      <div class="inv-card-total">$${inv.total.toFixed(2)}</div>
+      ${_showTotals ? `<div class="inv-card-total">$${inv.total.toFixed(2)}</div>` : ""}
     </div>
     <div class="inv-card-meta">
       <b>${inv.toName}</b>${inv.toEmail ? ' · '+inv.toEmail : ''}<br>
