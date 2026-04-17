@@ -311,7 +311,7 @@ input.unlocked:focus{box-shadow:0 0 0 3px rgba(24,95,165,.15);border-color:var(-
 
   <div style="text-align:center;padding:8px 0 4px;font-size:12px;color:var(--text3);line-height:1.8">
     <div style="font-weight:600;font-size:13px;color:var(--text2)">PodINV App</div>
-    <div>Version 1.5.3</div>
+    <div>Version 1.5.4</div>
     <div>18 April 2026</div>
   </div>
 </div>
@@ -730,13 +730,34 @@ function _saveRecord(record) {
 }
 
 // ── Load an existing invoice into the form for editing ────────
+// ── View invoice (read-only + inline patient name editing) ────
 function viewInvoice(id) {
   const inv = invoices.find(i => i.id === id);
   if (!inv) return;
+  _renderViewModal(id, false);
+}
 
+function _renderViewModal(id, editingNames) {
+  const inv = invoices.find(i => i.id === id);
+  if (!inv) return;
+
+  // Patient list — editable inputs when editingNames, plain text otherwise
   const patientsHTML = inv.patients.length
-    ? inv.patients.map((p,i) => `<div style="font-size:14px;padding:3px 0;color:var(--text2)">${i+1}. ${p}</div>`).join('')
+    ? inv.patients.map((p, i) => editingNames
+        ? `<div style="display:flex;align-items:center;gap:8px;padding:4px 0">
+             <span style="font-size:12px;color:var(--text3);min-width:20px">${i+1}.</span>
+             <input type="text" id="vp-${i}" value="${p.replace(/"/g,'&quot;')}"
+               style="flex:1;font-size:14px;padding:5px 9px;border:.5px solid var(--border2);
+                      border-radius:var(--radius);background:var(--bg2);color:var(--text);
+                      font-family:inherit;outline:none">
+           </div>`
+        : `<div style="font-size:14px;padding:3px 0;color:var(--text2)">${i+1}. ${p}</div>`
+      ).join('')
     : '<div style="font-size:13px;color:var(--text3)">No patient list recorded</div>';
+
+  const patientSectionLabel = editingNames
+    ? '<div style="font-size:12px;color:var(--amber-text);margin-bottom:8px;font-weight:600">✏ Editing names — tap a name to correct it</div>'
+    : '<div style="font-size:12px;color:var(--text2);margin-bottom:8px;font-weight:500;text-transform:uppercase;letter-spacing:.3px">Patient list</div>';
 
   showModal(`
     <div class="modal-title">#${inv.invNum}</div>
@@ -748,10 +769,6 @@ function viewInvoice(id) {
         <span class="confirm-value">${inv.toName || '—'}</span>
       </div>
       <div class="confirm-row">
-        <span class="confirm-label">Email</span>
-        <span class="confirm-value" style="font-size:13px">${inv.toEmail || '—'}</span>
-      </div>
-      <div class="confirm-row">
         <span class="confirm-label">Location</span>
         <span class="confirm-value">${inv.locationName}</span>
       </div>
@@ -760,33 +777,63 @@ function viewInvoice(id) {
         <span class="confirm-value">$${inv.unitPrice.toFixed(2)} / patient</span>
       </div>
       <div class="confirm-row" style="padding-bottom:0">
-        <span class="confirm-label">Patients</span>
-        <span class="confirm-value">${inv.patientCount}</span>
+        <span class="confirm-label">Total</span>
+        <span class="confirm-value" style="font-weight:700;color:var(--blue-text)">$${inv.total.toFixed(2)}</span>
       </div>
     </div>
 
-    <div style="background:var(--bg2);border-radius:var(--radius);padding:10px 14px;margin-bottom:14px">
-      <div style="font-size:12px;color:var(--text2);margin-bottom:8px;font-weight:500;text-transform:uppercase;letter-spacing:.3px">Patient list</div>
+    <div style="background:${editingNames ? 'var(--amber-bg)' : 'var(--bg2)'};border-radius:var(--radius);padding:10px 14px;margin-bottom:14px;border:${editingNames ? '1px solid var(--amber)' : 'none'}">
+      ${patientSectionLabel}
       ${patientsHTML}
     </div>
 
-    <div style="background:var(--blue-bg);border-radius:var(--radius);padding:12px 14px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center">
-      <span style="font-size:14px;font-weight:600;color:var(--blue-text)">Total due</span>
-      <span class="confirm-total">$${inv.total.toFixed(2)}</span>
-    </div>
-
+    ${editingNames ? `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+      <button onclick="_renderViewModal('${id}', false)" style="padding:11px;font-size:14px">✕ Cancel</button>
+      <button onclick="_savePatientNames('${id}')"
+        style="padding:11px;font-size:14px;background:var(--green-bg);color:var(--green-text);border-color:var(--green-text);font-weight:600">
+        ✓ Save names
+      </button>
+    </div>` : `
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
       <button onclick="closeModal();reprintInvoice('${inv.id}')" style="padding:11px;font-size:14px">🖨 Reprint</button>
       <button onclick="closeModal();shareInvoiceFile('${inv.id}')" style="padding:11px;font-size:14px;background:var(--blue-bg);color:var(--blue-text);border-color:var(--blue)">↑ Share</button>
     </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-      <button onclick="closeModal()" style="padding:11px;font-size:14px">← Back</button>
-      <button onclick="closeModal();editInvoice('${inv.id}')"
-        style="padding:11px;font-size:14px;background:var(--amber-bg);color:var(--amber-text);border-color:var(--amber)">
-        ✏ Edit invoice
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+      <button onclick="closeModal()" style="padding:10px;font-size:13px">← Back</button>
+      <button onclick="_renderViewModal('${inv.id}', true)"
+        style="padding:10px;font-size:13px;background:var(--amber-bg);color:var(--amber-text);border-color:var(--amber)">
+        ✏ Fix names
       </button>
-    </div>
+      <button onclick="closeModal();editInvoice('${inv.id}')"
+        style="padding:10px;font-size:13px;background:var(--bg2);color:var(--text2)">
+        ⚙ Full edit
+      </button>
+    </div>`}
   `);
+}
+
+// Save only patient names — nothing else changes (price, total, date all preserved)
+function _savePatientNames(id) {
+  const inv = invoices.find(i => i.id === id);
+  if (!inv) return;
+
+  const updated = [];
+  for (let i = 0; i < inv.patients.length; i++) {
+    const inp = document.getElementById('vp-' + i);
+    const name = inp ? inp.value.trim() : inv.patients[i];
+    if (name) updated.push(name);
+  }
+
+  // Update only the patients array and count — everything else untouched
+  const idx = invoices.findIndex(i => i.id === id);
+  invoices[idx].patients     = updated;
+  invoices[idx].patientCount = updated.length;
+  LS.set('pod_invoices', invoices);
+  renderHistory();
+
+  // Return to view with updated names
+  _renderViewModal(id, false);
 }
 
 function editInvoice(id) {
