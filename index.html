@@ -155,16 +155,6 @@ input.unlocked:focus{box-shadow:0 0 0 3px rgba(24,95,165,.15);border-color:var(-
     <div id="dateText" style="font-size:13px;color:var(--text2)"></div>
   </div>
 
-  <!-- To -->
-  <div class="card">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-      <span class="label" style="margin:0">To (who is paying you)</span>
-      <button class="lock-btn is-locked" id="to-lock-btn" onclick="toggleToEdit()">🔒 Locked</button>
-    </div>
-    <input type="text"  id="toName"  placeholder="Recipient name" class="locked" readonly style="margin-bottom:8px">
-    <input type="email" id="toEmail" placeholder="recipient@email.com" class="locked" readonly>
-  </div>
-
   <!-- Service -->
   <div class="card">
     <span class="label">Service type</span>
@@ -263,8 +253,16 @@ input.unlocked:focus{box-shadow:0 0 0 3px rgba(24,95,165,.15);border-color:var(-
       <input type="text" id="set-pdfname" placeholder="Name for PDF file" class="locked" readonly>
     </div>
     <span class="label">Bank account number</span>
-    <div class="field-row last-field">
+    <div class="field-row">
       <input type="text" id="set-bank" placeholder="Your bank account number" class="locked" readonly>
+    </div>
+    <span class="label">Invoice recipient name (who is paying)</span>
+    <div class="field-row">
+      <input type="text" id="set-toname" placeholder="Recipient name" class="locked" readonly>
+    </div>
+    <span class="label">Recipient email (who pays)</span>
+    <div class="field-row last-field">
+      <input type="email" id="set-toemail" placeholder="recipient@email.com" class="locked" readonly>
     </div>
     <button class="btn-primary" id="provider-save-btn" onclick="saveSettings()" style="display:none">Save details</button>
   </div>
@@ -303,6 +301,12 @@ input.unlocked:focus{box-shadow:0 0 0 3px rgba(24,95,165,.15);border-color:var(-
   <div class="card">
     <h3>Saved locations</h3>
     <div id="locsList"></div>
+  </div>
+
+  <div style="text-align:center;padding:8px 0 4px;font-size:12px;color:var(--text3);line-height:1.8">
+    <div style="font-weight:600;font-size:13px;color:var(--text2)">PodINV App</div>
+    <div>Version 1.5</div>
+    <div>18 April 2026</div>
   </div>
 </div>
 
@@ -403,20 +407,7 @@ function init() {
     `${t.getFullYear()}-${pad(t.getMonth()+1)}-${pad(t.getDate())}`;
   onDateChange();
 
-  // Pre-fill To fields from settings (saved with everything else)
-  document.getElementById('toName').value  = settings.toName  || DEFAULTS.toName;
-  document.getElementById('toEmail').value = settings.toEmail || DEFAULTS.toEmail;
-  // If settings didn't have them yet, save now so first refresh works
-  if (!settings.toName && DEFAULTS.toName) {
-    settings.toName  = DEFAULTS.toName;
-    settings.toEmail = DEFAULTS.toEmail;
-    LS.set('pod_settings', settings);
-  }
-  // Ensure To fields start locked
-  ['toName','toEmail'].forEach(id => {
-    const inp = document.getElementById(id);
-    inp.classList.add('locked'); inp.classList.remove('unlocked'); inp.readOnly = true;
-  });
+  // To fields now live in settings — no DOM fields to pre-fill on invoice screen
 
   refreshLocSelect();
   updateProviderHint();
@@ -636,11 +627,11 @@ function updateProviderHint() {
 // ══════════════════════════════════════════════════════════
 function confirmAndGenerate() {
   if (!settings.name)         { alert('Please go to Settings and enter your name first.'); return; }
-  const toName      = document.getElementById('toName').value.trim();
-  const toEmail     = document.getElementById('toEmail').value.trim();
+  const toName      = settings.toName  || '';
+  const toEmail     = settings.toEmail || '';
   const serviceType = document.getElementById('serviceType').value.trim() || 'Podiatry Services';
   const loc         = currentLoc();
-  if (!toName)                { alert('Please enter the recipient name.'); return; }
+  if (!toName) { alert('Please add recipient name in Settings first.'); showScreen('settings'); return; }
   if (!loc)                   { alert('Please select a location.'); return; }
   if (!selectedPatients.length) { alert('Please add at least one patient.'); return; }
 
@@ -743,17 +734,7 @@ function editInvoice(id) {
   // Switch to invoice screen
   showScreen('invoice');
 
-  // Unlock To fields so they can be populated
-  ['toName','toEmail'].forEach(fid => {
-    const el = document.getElementById(fid);
-    if (el) { el.readOnly = false; el.className = 'unlocked'; }
-  });
-  const toBtn = document.getElementById('to-lock-btn');
-  if (toBtn) { toBtn.className = 'lock-btn is-unlocked'; toBtn.textContent = '🔓 Editing'; }
-
   // Fill in form fields
-  document.getElementById('toName').value      = inv.toName;
-  document.getElementById('toEmail').value     = inv.toEmail || '';
   document.getElementById('serviceType').value = inv.serviceType;
 
   // Set date
@@ -829,18 +810,12 @@ function cancelEdit() {
   renderPatients();
   document.getElementById('locSelect').value = '';
   onLocChange();
-  // Re-lock To fields
-  ['toName','toEmail'].forEach(fid => {
-    const el = document.getElementById(fid);
-    if (el) { el.readOnly = true; el.className = 'locked'; }
-  });
-  const toBtn = document.getElementById('to-lock-btn');
-  if (toBtn) { toBtn.className = 'lock-btn is-locked'; toBtn.textContent = '🔒 Locked'; }
+
 }
 
 function buildRecord() {
-  const toName      = document.getElementById('toName').value.trim();
-  const toEmail     = document.getElementById('toEmail').value.trim();
+  const toName      = settings.toName  || '';
+  const toEmail     = settings.toEmail || '';
   const serviceType = document.getElementById('serviceType').value.trim() || 'Podiatry Services';
   const loc         = currentLoc();
   const invDate     = document.getElementById('invDate').value;
@@ -1349,8 +1324,10 @@ function renderSettings() {
   document.getElementById('set-name').value    = settings.name    || '';
   document.getElementById('set-pdfname').value = settings.pdfName || '';
   document.getElementById('set-bank').value    = settings.bank    || '';
+  document.getElementById('set-toname').value  = settings.toName  || '';
+  document.getElementById('set-toemail').value = settings.toEmail || '';
   // Ensure provider fields start locked
-  ['set-name','set-pdfname','set-bank'].forEach(id => {
+  ['set-name','set-pdfname','set-bank','set-toname','set-toemail'].forEach(id => {
     const inp = document.getElementById(id);
     inp.classList.add('locked'); inp.classList.remove('unlocked'); inp.readOnly = true;
   });
@@ -1478,31 +1455,8 @@ function renderSettings() {
     list.append(wrap);
   });
 }
-function toggleToEdit() {
-  const ids = ['toName','toEmail'];
-  const isLocked = document.getElementById('toName').readOnly;
-  ids.forEach(id => {
-    const inp = document.getElementById(id);
-    inp.readOnly  = !isLocked;
-    inp.className = isLocked ? 'unlocked' : 'locked';
-  });
-  const btn = document.getElementById('to-lock-btn');
-  if (isLocked) {
-    btn.className   = 'lock-btn is-unlocked';
-    btn.textContent = '🔓 Editing';
-    document.getElementById('toName').focus();
-  } else {
-    btn.className   = 'lock-btn is-locked';
-    btn.textContent = '🔒 Locked';
-    // Save into settings so To fields persist across refreshes
-    settings.toName  = document.getElementById('toName').value.trim();
-    settings.toEmail = document.getElementById('toEmail').value.trim();
-    LS.set('pod_settings', settings);
-  }
-}
-
 function toggleProviderEdit() {
-  const ids    = ['set-name','set-pdfname','set-bank'];
+  const ids    = ['set-name','set-pdfname','set-bank','set-toname','set-toemail'];
   const isLocked = document.getElementById('set-name').readOnly;
   ids.forEach(id => {
     const inp = document.getElementById(id);
@@ -1532,10 +1486,12 @@ function saveSettings() {
   settings.name    = name;
   settings.pdfName = pdfName;
   settings.bank    = bank;
+  settings.toName  = document.getElementById('set-toname').value.trim();
+  settings.toEmail = document.getElementById('set-toemail').value.trim();
   LS.set('pod_settings', settings);
   updateProviderHint();
   // Re-lock all provider fields after saving
-  ['set-name','set-pdfname','set-bank'].forEach(id => {
+  ['set-name','set-pdfname','set-bank','set-toname','set-toemail'].forEach(id => {
     const inp = document.getElementById(id);
     inp.readOnly  = true;
     inp.className = 'locked';
@@ -1571,8 +1527,10 @@ function renderSettings() {
   document.getElementById('set-name').value    = settings.name    || '';
   document.getElementById('set-pdfname').value = settings.pdfName || '';
   document.getElementById('set-bank').value    = settings.bank    || '';
+  document.getElementById('set-toname').value  = settings.toName  || '';
+  document.getElementById('set-toemail').value = settings.toEmail || '';
   // Ensure provider fields start locked
-  ['set-name','set-pdfname','set-bank'].forEach(id => {
+  ['set-name','set-pdfname','set-bank','set-toname','set-toemail'].forEach(id => {
     const inp = document.getElementById(id);
     inp.classList.add('locked'); inp.classList.remove('unlocked'); inp.readOnly = true;
   });
@@ -1700,31 +1658,8 @@ function renderSettings() {
     list.append(wrap);
   });
 }
-function toggleToEdit() {
-  const ids = ['toName','toEmail'];
-  const isLocked = document.getElementById('toName').readOnly;
-  ids.forEach(id => {
-    const inp = document.getElementById(id);
-    inp.readOnly  = !isLocked;
-    inp.className = isLocked ? 'unlocked' : 'locked';
-  });
-  const btn = document.getElementById('to-lock-btn');
-  if (isLocked) {
-    btn.className   = 'lock-btn is-unlocked';
-    btn.textContent = '🔓 Editing';
-    document.getElementById('toName').focus();
-  } else {
-    btn.className   = 'lock-btn is-locked';
-    btn.textContent = '🔒 Locked';
-    // Save into settings so To fields persist across refreshes
-    settings.toName  = document.getElementById('toName').value.trim();
-    settings.toEmail = document.getElementById('toEmail').value.trim();
-    LS.set('pod_settings', settings);
-  }
-}
-
 function toggleProviderEdit() {
-  const ids    = ['set-name','set-pdfname','set-bank'];
+  const ids    = ['set-name','set-pdfname','set-bank','set-toname','set-toemail'];
   const isLocked = document.getElementById('set-name').readOnly;
   ids.forEach(id => {
     const inp = document.getElementById(id);
@@ -1754,10 +1689,12 @@ function saveSettings() {
   settings.name    = name;
   settings.pdfName = pdfName;
   settings.bank    = bank;
+  settings.toName  = document.getElementById('set-toname').value.trim();
+  settings.toEmail = document.getElementById('set-toemail').value.trim();
   LS.set('pod_settings', settings);
   updateProviderHint();
   // Re-lock all provider fields after saving
-  ['set-name','set-pdfname','set-bank'].forEach(id => {
+  ['set-name','set-pdfname','set-bank','set-toname','set-toemail'].forEach(id => {
     const inp = document.getElementById(id);
     inp.readOnly  = true;
     inp.className = 'locked';
@@ -1986,11 +1923,7 @@ function importBackup(event) {
       }
       locations = LS.get('pod_locations') || [];
       invoices  = LS.get('pod_invoices')  || [];
-      // Restore To fields into the form from restored settings
-      const toNameEl  = document.getElementById('toName');
-      const toEmailEl = document.getElementById('toEmail');
-      if (toNameEl  && settings.toName)  toNameEl.value  = settings.toName;
-      if (toEmailEl && settings.toEmail) toEmailEl.value = settings.toEmail;
+      // To fields live in settings — renderSettings() below handles display
       refreshLocSelect(); onLocChange(); updateProviderHint(); renderSettings();
       showStatus(`Restored! ${invoices.length} invoice(s) in history.`, 'ok');
     } catch { showStatus('Could not read this file.', 'err'); }
