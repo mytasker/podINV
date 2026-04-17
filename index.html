@@ -361,11 +361,13 @@ const LS = {
     version: 4,
     exportedAt: new Date().toISOString(),
     settings:  LS.get('pod_settings')  || {},
+    to:        LS.get('pod_to')        || {},
     locations: LS.get('pod_locations') || [],
     invoices:  LS.get('pod_invoices')  || []
   }),
   restore: d => {
     if (d.settings)  LS.set('pod_settings',  d.settings);
+    if (d.to)        LS.set('pod_to',        d.to);
     if (d.locations) LS.set('pod_locations', d.locations);
     if (d.invoices)  LS.set('pod_invoices',  d.invoices);
   }
@@ -403,9 +405,10 @@ function init() {
     `${t.getFullYear()}-${pad(t.getMonth()+1)}-${pad(t.getDate())}`;
   onDateChange();
 
-  // Pre-fill To fields
-  document.getElementById('toName').value  = DEFAULTS.toName;
-  document.getElementById('toEmail').value = DEFAULTS.toEmail;
+  // Pre-fill To fields — from localStorage if saved, else from DEFAULTS
+  const savedTo = LS.get('pod_to') || {};
+  document.getElementById('toName').value  = savedTo.name  || DEFAULTS.toName;
+  document.getElementById('toEmail').value = savedTo.email || DEFAULTS.toEmail;
   // Ensure To fields start locked
   ['toName','toEmail'].forEach(id => {
     const inp = document.getElementById(id);
@@ -1488,6 +1491,11 @@ function toggleToEdit() {
   } else {
     btn.className   = 'lock-btn is-locked';
     btn.textContent = '🔒 Locked';
+    // Save to localStorage whenever the user locks the fields
+    LS.set('pod_to', {
+      name:  document.getElementById('toName').value.trim(),
+      email: document.getElementById('toEmail').value.trim()
+    });
   }
 }
 
@@ -1706,6 +1714,11 @@ function toggleToEdit() {
   } else {
     btn.className   = 'lock-btn is-locked';
     btn.textContent = '🔒 Locked';
+    // Save to localStorage whenever the user locks the fields
+    LS.set('pod_to', {
+      name:  document.getElementById('toName').value.trim(),
+      email: document.getElementById('toEmail').value.trim()
+    });
   }
 }
 
@@ -1966,6 +1979,12 @@ function importBackup(event) {
       settings  = LS.get('pod_settings')  || {};
       locations = LS.get('pod_locations') || [];
       invoices  = LS.get('pod_invoices')  || [];
+      // Restore To fields into the form
+      const restoredTo = LS.get('pod_to') || {};
+      const toNameEl  = document.getElementById('toName');
+      const toEmailEl = document.getElementById('toEmail');
+      if (toNameEl  && restoredTo.name)  toNameEl.value  = restoredTo.name;
+      if (toEmailEl && restoredTo.email) toEmailEl.value = restoredTo.email;
       refreshLocSelect(); onLocChange(); updateProviderHint(); renderSettings();
       showStatus(`Restored! ${invoices.length} invoice(s) in history.`, 'ok');
     } catch { showStatus('Could not read this file.', 'err'); }
