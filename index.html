@@ -311,7 +311,7 @@ input.unlocked:focus{box-shadow:0 0 0 3px rgba(24,95,165,.15);border-color:var(-
 
   <div style="text-align:center;padding:8px 0 4px;font-size:12px;color:var(--text3);line-height:1.8">
     <div style="font-weight:600;font-size:13px;color:var(--text2)">PodINV App</div>
-    <div>Version 1.5.5</div>
+    <div>Version 1.5.6</div>
     <div>18 April 2026</div>
   </div>
 </div>
@@ -956,7 +956,7 @@ function buildRecord() {
 }
 
 // ══════════════════════════════════════════════════════════
-// GENERATE REAL PDF FILE  (jsPDF + html2canvas)
+// GENERATE TEXT-BASED PDF (jsPDF native text — fully selectable & copyable)
 // ══════════════════════════════════════════════════════════
 function showPDFProgress(msg) {
   let overlay = document.getElementById('pdf-overlay');
@@ -977,85 +977,149 @@ function hidePDFProgress() {
   if (el) el.remove();
 }
 
-async function makePDFFile(record) {
-  const displayName  = record.providerName;  // Na Li inside the PDF — pdfName is only for the filename
-  const patientsHTML = record.patients.map((p,i) => `<b>${i+1}.</b> ${p}`).join('<br>');
-
-  // Build a styled div that html2canvas will render
-  const wrap = document.createElement('div');
-  wrap.style.cssText = [
-    'position:fixed','left:-9999px','top:0',
-    'width:794px','padding:40px 48px',
-    'background:#fff','color:#111',
-    'font-family:Arial,Helvetica,sans-serif','font-size:13px',
-    'line-height:1.4'
-  ].join(';');
-
-  wrap.innerHTML = `
-    <style>
-      *{box-sizing:border-box}
-      .hdr{display:flex;justify-content:space-between;align-items:flex-start;
-           margin-bottom:28px;border-bottom:2px solid #111;padding-bottom:16px}
-      table{width:100%;border-collapse:collapse;margin-top:8px}
-      th{background:#222;color:#fff;padding:9px 12px;text-align:left;
-         font-size:11px;text-transform:uppercase;letter-spacing:.5px}
-      td{padding:10px 12px;border-bottom:.5px solid #ccc;vertical-align:top}
-      .tr td{background:#f5f5f5;font-weight:bold;font-size:14px}
-      .sr td{background:#fafafa;font-size:12px;color:#555}
-    </style>
-    <div class="hdr">
-      <div>
-        <div style="margin-bottom:8px"><b>To:</b> ${record.toName}${record.toEmail?' &lt;'+record.toEmail+'&gt;':''}</div>
-        <div><b>Provider details:</b> ${displayName}</div>
-      </div>
-      <div style="text-align:right">
-        <div style="font-size:22px;font-weight:bold">TAX INVOICE</div>
-        <div style="font-size:13px;color:#444;margin-top:4px">TAX INVOICE #${record.invNum}</div>
-        <div style="font-size:13px;color:#444">${record.dateText}</div>
-      </div>
-    </div>
-    <table>
-      <thead><tr><th>Description</th><th>Patient</th><th>Unit Price</th><th>Total</th></tr></thead>
-      <tbody>
-        <tr>
-          <td>${record.serviceType}<br>${record.dateText}<br><i>${record.locationName}</i></td>
-          <td>${patientsHTML}<br><br>
-            <b>${record.patientCount}&times;$${record.unitPrice.toFixed(2)}=$${record.total.toFixed(2)}</b>
-          </td>
-          <td>$${record.unitPrice.toFixed(2)}</td>
-          <td>${record.patientCount}</td>
-        </tr>
-        <tr class="sr">
-          <td colspan="2"><b>Name:</b> ${displayName}</td><td>Subtotal</td><td></td>
-        </tr>
-        <tr class="sr">
-          <td colspan="2"><b>Bank account:</b> ${record.bankAccount}</td><td>Sales tax</td><td></td>
-        </tr>
-        <tr class="tr">
-          <td colspan="2"></td><td>TOTAL DUE</td><td>$${record.total.toFixed(2)}</td>
-        </tr>
-      </tbody>
-    </table>`;
-
-  document.body.appendChild(wrap);
+function makePDFFile(record) {
+  showPDFProgress('Generating PDF…');
   try {
-    showPDFProgress('Generating PDF…');
-    const canvas = await html2canvas(wrap, {
-      scale: 2, backgroundColor: '#ffffff', logging: false, useCORS: true
-    });
     const { jsPDF } = window.jspdf;
-    const pdf      = new jsPDF('p', 'mm', 'a4');
-    const imgData  = canvas.toDataURL('image/jpeg', 0.95);
-    const pgW      = pdf.internal.pageSize.getWidth();
-    const pgH      = (canvas.height * pgW) / canvas.width;
-    pdf.addImage(imgData, 'JPEG', 0, 0, pgW, pgH);
-    const blob     = pdf.output('blob');
-    const safeName = (record.pdfName || record.providerName || 'invoice').replace(/\s+/g, '_');
-    const fileName = `${safeName}_invoice_${record.invNum}.pdf`;
-    return new File([blob], fileName, { type: 'application/pdf' });
-  } finally {
-    document.body.removeChild(wrap);
+    const doc  = new jsPDF('p', 'mm', 'a4');
+    const pw   = doc.internal.pageSize.getWidth();   // 210mm
+    const ph   = doc.internal.pageSize.getHeight();  // 297mm
+    const ml   = 15, mr = 15, mt = 18;
+    const cw   = pw - ml - mr;    // content width
+    let   y    = mt;
+
+    const displayName = record.providerName;
+    const safeName    = (record.pdfName || record.providerName || 'invoice').replace(/\s+/g, '_');
+    const fileName    = `${safeName}_invoice_${record.invNum}.pdf`;
+
+    // ── helpers ─────────────────────────────────────────────
+    const setFont = (style, size, color) => {
+      doc.setFont('helvetica', style);
+      doc.setFontSize(size);
+      doc.setTextColor(color || '#111111');
+    };
+    const line = (x1, y1, x2, y2, color, lw) => {
+      doc.setDrawColor(color || '#cccccc');
+      doc.setLineWidth(lw || 0.3);
+      doc.line(x1, y1, x2, y2);
+    };
+    const fillRect = (x, fy, w, h, color) => {
+      doc.setFillColor(color);
+      doc.rect(x, fy, w, h, 'F');
+    };
+    const cell = (text, x, cy, w, opts) => {
+      const align = (opts && opts.align) || 'left';
+      const pad   = (opts && opts.pad   !== undefined) ? opts.pad : 2;
+      doc.text(String(text), align === 'right' ? x + w - pad : x + pad, cy + 4.5, { align });
+    };
+
+    // ── HEADER ───────────────────────────────────────────────
+    // Left: To + Provider
+    setFont('bold', 10);
+    doc.text('To:', ml, y);
+    setFont('normal', 10);
+    doc.text(record.toName + (record.toEmail ? '  <' + record.toEmail + '>' : ''), ml + 8, y);
+    y += 6;
+    setFont('bold', 10);
+    doc.text('Provider details:', ml, y);
+    setFont('normal', 10);
+    doc.text(displayName, ml + 33, y);
+
+    // Right: TAX INVOICE title
+    setFont('bold', 18, '#111111');
+    doc.text('TAX INVOICE', pw - mr, mt - 2, { align: 'right' });
+    setFont('normal', 9, '#444444');
+    doc.text('TAX INVOICE #' + record.invNum, pw - mr, mt + 7, { align: 'right' });
+    doc.text(record.dateText.toUpperCase(), pw - mr, mt + 12, { align: 'right' });
+
+    y += 8;
+    line(ml, y, pw - mr, y, '#111111', 0.6);
+    y += 6;
+
+    // ── TABLE HEADER ─────────────────────────────────────────
+    const cols = {
+      desc:    { x: ml,         w: 52 },
+      patient: { x: ml + 52,    w: 90 },
+      price:   { x: ml + 142,   w: 28 },
+      total:   { x: ml + 170,   w: cw - 170 }
+    };
+    const rowH = 7;
+
+    fillRect(ml, y, cw, rowH, '#222222');
+    setFont('bold', 8, '#ffffff');
+    cell('DESCRIPTION', cols.desc.x,    y, cols.desc.w);
+    cell('PATIENT',     cols.patient.x,  y, cols.patient.w);
+    cell('UNIT PRICE',  cols.price.x,    y, cols.price.w);
+    cell('TOTAL',       cols.total.x,    y, cols.total.w);
+    y += rowH;
+
+    // ── MAIN DATA ROW ─────────────────────────────────────────
+    // Calculate row height based on patient list
+    const patientLines = record.patients.map((p, i) => `${i+1}. ${p}`);
+    const summaryLine  = `${record.patientCount} x $${record.unitPrice.toFixed(2)} = $${record.total.toFixed(2)}`;
+    const dataRowH     = Math.max(24, (patientLines.length + 2) * 5 + 8);
+
+    // Description cell
+    setFont('normal', 9, '#111111');
+    doc.text(record.serviceType, cols.desc.x + 2, y + 5);
+    doc.text(record.dateText,    cols.desc.x + 2, y + 10);
+    setFont('italic', 9);
+    doc.text(record.locationName, cols.desc.x + 2, y + 15);
+
+    // Patient list cell
+    setFont('normal', 9, '#111111');
+    patientLines.forEach((pl, i) => {
+      doc.text(pl, cols.patient.x + 2, y + 5 + i * 5);
+    });
+    setFont('bold', 9);
+    doc.text(summaryLine, cols.patient.x + 2, y + 5 + patientLines.length * 5 + 2);
+
+    // Price + Total cells
+    setFont('normal', 9, '#111111');
+    doc.text('$' + record.unitPrice.toFixed(2), cols.price.x + 2, y + 5);
+    doc.text(String(record.patientCount),        cols.total.x + 2, y + 5);
+
+    // Row border
+    line(ml, y + dataRowH, pw - mr, y + dataRowH, '#cccccc', 0.2);
+    y += dataRowH;
+
+    // ── SUBTOTAL ROW ──────────────────────────────────────────
+    fillRect(ml, y, cw, rowH, '#fafafa');
+    setFont('bold', 8.5, '#555555');
+    doc.text('Name:', cols.desc.x + 2, y + 4.5);
+    setFont('normal', 8.5, '#555555');
+    doc.text(displayName, cols.desc.x + 14, y + 4.5);
+    setFont('normal', 8.5, '#555555');
+    doc.text('Subtotal', cols.price.x + 2, y + 4.5);
+    line(ml, y + rowH, pw - mr, y + rowH, '#cccccc', 0.2);
+    y += rowH;
+
+    // ── BANK ROW ──────────────────────────────────────────────
+    fillRect(ml, y, cw, rowH, '#fafafa');
+    setFont('bold', 8.5, '#555555');
+    doc.text('Bank account:', cols.desc.x + 2, y + 4.5);
+    setFont('normal', 8.5, '#555555');
+    doc.text(record.bankAccount, cols.desc.x + 28, y + 4.5);
+    doc.text('Sales tax', cols.price.x + 2, y + 4.5);
+    line(ml, y + rowH, pw - mr, y + rowH, '#cccccc', 0.2);
+    y += rowH;
+
+    // ── TOTAL DUE ROW ─────────────────────────────────────────
+    const totalRowH = 9;
+    fillRect(ml, y, cw, totalRowH, '#f0f0f0');
+    setFont('bold', 10, '#111111');
+    doc.text('TOTAL DUE', cols.price.x + 2, y + 5.5);
+    setFont('bold', 12, '#111111');
+    doc.text('$' + record.total.toFixed(2), cols.total.x + 2, y + 5.5);
+    line(ml, y + totalRowH, pw - mr, y + totalRowH, '#111111', 0.5);
+
+    // ── OUTPUT ────────────────────────────────────────────────
+    const blob = doc.output('blob');
     hidePDFProgress();
+    return Promise.resolve(new File([blob], fileName, { type: 'application/pdf' }));
+  } catch(e) {
+    hidePDFProgress();
+    return Promise.reject(e);
   }
 }
 
